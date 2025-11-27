@@ -1,6 +1,6 @@
 # Kubespray Hetzner Cluster
 
-This repository automates provisioning bare-metal Hetzner servers and installing a production-ready Kubernetes cluster using Kubespray.
+This repository automates provisioning bare-metal Hetzner servers and installing a Kubernetes cluster using Kubespray.
 
 ## 1. Install Ansible Galaxy Requirements
 
