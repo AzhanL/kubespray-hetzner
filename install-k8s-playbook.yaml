@@ -1,0 +1,11 @@
+- name: Install Kubernetes
+  import_playbook: kubernetes_sigs.kubespray.cluster
+  vars:
+    ansible_ssh_private_key_file: "k8s_key"
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+    ansible_become: true
+    ansible_user: root
+    
+    # See https://kubespray.io/ 
+    # for fine-tuning your cluster
+    kube_network_plugin: calico

@@ -1,0 +1,120 @@
+- name: Create servers
+
+  # We don't have an inventory yet.
+  # We will generate it dynamically.
+  # For now, the tasks will be executed locally.
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  # We will use the "global_state" variable for the convenience
+  # of quickly destroying our nodes.
+  vars:
+    global_state: "present"
+    ssh_key_path: "k8s_key"
+  vars_files:
+    - secrets.yaml
+  tasks:
+
+    - name: Generate SSH key
+      community.crypto.openssh_keypair:
+        path: "{{ ssh_key_path }}"
+        size: 2048
+        type: ed25519
+        comment: "k8s_key@local"
+      register: ssh_key
+
+    # Now, let's send this key to Hetzner.
+    # You will be able to check this key here:
+    # Security → SSH keys
+    - name: Set the key to Hetzner
+      hetzner.hcloud.ssh_key:
+        name: k3s_id
+        public_key: "{{ ssh_key.public_key }}"
+        state: "{{ global_state }}"
+        api_token: "{{ hcloud_token }}"
+      register: hcloud_ssh_key
+
+    # Creating Nodes:
+
+    - name: Create Node 1
+      hetzner.hcloud.server:
+        api_token: "{{ hcloud_token }}"
+        name: node1
+        server_type: cpx11
+        image: ubuntu-24.04
+        location: ash
+        state: "{{ global_state }}"
+        ssh_keys:
+          - "{{ hcloud_ssh_key.hcloud_ssh_key.name if hcloud_ssh_key.hcloud_ssh_key.name is defined else omit }}"
+      register: n1
+
+    - name: "Debug n1"
+      ansible.builtin.debug:
+        var: n1
+
+    - name: Create Node 2
+      hetzner.hcloud.server:
+        api_token: "{{ hcloud_token }}"
+        name: node2
+        server_type: cpx11
+        image: ubuntu-24.04
+        location: ash
+        state: "{{ global_state }}"
+        ssh_keys:
+          - "{{ hcloud_ssh_key.hcloud_ssh_key.name if hcloud_ssh_key.hcloud_ssh_key.name is defined else omit }}"
+      register: n2
+
+    - name: "Debug n2"
+      ansible.builtin.debug:
+        var: n2
+
+    # Let's add a task that will stop execution
+    # if we destroy our nodes with the state: absent parameter.
+    - name: Stop playbook if global_state is absent
+      ansible.builtin.meta: end_play
+      when: global_state == 'absent'
+
+    # Let's check if the nodes have been created.
+    - name: Check servers
+      ansible.builtin.assert:
+        that:
+          - n1.hcloud_server is not none
+          - n2.hcloud_server is not none
+        fail_msg: "One or more servers were not created."
+        success_msg: "All servers have been created."
+
+    # Preparing the inventory for Kubespray.
+    # You can see an example of the inventory here:
+    # https://github.com/kubernetes-sigs/kubespray/blob/master/inventory/sample/inventory.ini
+
+    - name: Add Node 1 to "kube_control_plane" group
+      ansible.builtin.add_host:
+        name: "{{ n1.hcloud_server.name }}"
+        ansible_host: "{{ n1.hcloud_server.ipv4_address }}"
+        ansible_hostname: "{{ n1.hcloud_server.name }}"
+        groups: kube_control_plane
+
+    - name: Add Node 2 to "kube_node" group
+      ansible.builtin.add_host:
+        name: "{{ n2.hcloud_server.name }}"
+        ansible_host: "{{ n2.hcloud_server.ipv4_address }}"
+        ansible_hostname: "{{ n2.hcloud_server.name }}"
+        groups: kube_node
+
+    - name: Add "kube_control_plane" to "etcd" group
+      ansible.builtin.add_host:
+        groups:
+          - etcd
+        name: "{{ item }}"
+      loop: "{{ groups['kube_control_plane'] }}"
+      when: groups['kube_control_plane'] is defined
+
+# Let's make sure that the created inventory
+# will be available in the next playbook.
+- name: Debug inventory
+  hosts: localhost
+  tasks:
+    - name: Print groups
+      ansible.builtin.debug:
+        var: groups

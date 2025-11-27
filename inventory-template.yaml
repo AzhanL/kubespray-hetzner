@@ -1,0 +1,20 @@
+servers:
+  hosts:
+    node1:
+      ansible_host: <node 1 ip>
+      ansible_user: root
+    node2:
+      ansible_host: <node 2 ip>
+      ansible_user: root
+
+kube_control_plane:
+  children:
+    servers:
+
+etcd:
+  hosts:
+    node1:
+
+kube_node:
+  children:
+    servers:
